@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import Login from "./rotas/Login.jsx";
 import Hoje from "./rotas/Hoje.jsx";
+import Gestao from "./rotas/Gestao.jsx";
 import Pesquisa from "./rotas/Pesquisa.jsx";
 import { T } from "./tokens.js";
 
@@ -27,6 +28,7 @@ export default function App() {
 
         <Route path="/entrar" element={sessao ? <Navigate to="/hoje" replace /> : <Login />} />
         <Route path="/hoje" element={sessao ? <Hoje /> : <Navigate to="/entrar" replace />} />
+        <Route path="/gestao" element={sessao ? <Gestao /> : <Navigate to="/entrar" replace />} />
         <Route path="*" element={<Navigate to={sessao ? "/hoje" : "/entrar"} replace />} />
       </Routes>
     </BrowserRouter>
