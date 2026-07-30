@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
-  CalendarPlus, ArrowLeft, LogOut, Users, Check, AlertTriangle, Trash2,
+  CalendarPlus, Users, Check, AlertTriangle, Trash2,
 } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
+import Cabecalho from "../componentes/Cabecalho.jsx";
 
 const dataHora = (iso) =>
   new Date(iso).toLocaleString("pt-BR",
@@ -141,24 +141,7 @@ export default function Agendar() {
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      <header style={{ background: T.accentDeep, color: "#fff", padding: "12px 16px",
-                       display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-                         width: 28, height: 28, background: T.gold, color: T.accentDeep }}>F</span>
-          Febracis · Gestão
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link to="/hoje" style={{ color: "#b3c3d8", fontSize: 14, textDecoration: "none",
-                                    display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <ArrowLeft size={16} strokeWidth={2} /> Sessões
-          </Link>
-          <button type="button" onClick={() => supabase.auth.signOut()} aria-label="Sair"
-            style={{ background: "none", border: "none", color: "#b3c3d8", cursor: "pointer" }}>
-            <LogOut size={18} strokeWidth={2} />
-          </button>
-        </span>
-      </header>
+      <Cabecalho />
 
       <main style={{ maxWidth: 980, margin: "0 auto", padding: "24px 16px 48px" }}>
         <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase",

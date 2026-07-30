@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-  Clock, MapPin, Video, Check, ChevronDown, Link2, X, LogOut, Plus,
+  Clock, MapPin, Video, Check, ChevronDown, Link2, X, Plus,
 } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
+import Cabecalho from "../componentes/Cabecalho.jsx";
 import LinksPesquisa from "../componentes/LinksPesquisa.jsx";
 import ProximosEncontros from "../componentes/ProximosEncontros.jsx";
 
@@ -397,22 +398,7 @@ export default function Hoje() {
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      <header style={{
-        background: T.accentDeep, color: "#fff", padding: "12px 16px",
-        display: "flex", alignItems: "center", justifyContent: "space-between"
-      }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800 }}>
-          <span style={{
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            width: 28, height: 28, background: T.gold, color: T.accentDeep
-          }}>F</span>
-          Febracis · Gestão
-        </span>
-        <button type="button" onClick={() => supabase.auth.signOut()} aria-label="Sair"
-          style={{ background: "none", border: "none", color: "#b3c3d8", cursor: "pointer" }}>
-          <LogOut size={18} strokeWidth={2} />
-        </button>
-      </header>
+      <Cabecalho />
 
       <main style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px 48px" }}>
         <p style={{
