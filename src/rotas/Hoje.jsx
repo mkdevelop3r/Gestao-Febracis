@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Clock, MapPin, Video, Check, ChevronDown, Send, X, LogOut, Plus,
+  Clock, MapPin, Video, Check, ChevronDown, Link2, X, LogOut, Plus,
 } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
@@ -191,12 +191,69 @@ function Formulario({ sessao, onCancelar, onPronto }) {
   );
 }
 
+/* Sessão realizada — o envio é manual, então o link não some ao fechar o
+   painel. Este botão volta a buscar os envios ainda não respondidos. */
+function LinkPesquisa({ sessao, onAbrir }) {
+  const [estado, setEstado] = useState("pronto"); // pronto | buscando | vazio
+  const [erro, setErro] = useState(null);
+
+  const abrir = async () => {
+    if (estado === "buscando") return;
+    setEstado("buscando");
+    setErro(null);
+
+    // vw_links_pendentes já traz nome/telefone do destinatário e respeita o
+    // RLS: o treinador só enxerga os próprios envios não respondidos.
+    const { data, error } = await supabase
+      .from("vw_links_pendentes")
+      .select("token, nome, telefone")
+      .eq("sessao_id", sessao.id);
+
+    if (error) { setEstado("pronto"); setErro(error.message); return; }
+    if (!data || data.length === 0) { setEstado("vazio"); return; }
+
+    setEstado("pronto");
+    onAbrir({ links: data, treinador: sessao.processos.treinadores?.nome });
+  };
+
+  if (estado === "vazio") {
+    return (
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14,
+        padding: "9px 12px", background: T.successSoft, color: "#12603c"
+      }}>
+        <Check size={15} strokeWidth={2} /> Todos já responderam a pesquisa desta sessão
+      </span>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+      <button type="button" onClick={abrir} disabled={estado === "buscando"}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px",
+          fontSize: 14, fontWeight: 600, cursor: estado === "buscando" ? "default" : "pointer",
+          background: T.bg, color: T.n700, border: `2px solid ${T.n300}`
+        }}>
+        <Link2 size={15} strokeWidth={2} />
+        {estado === "buscando" ? "Buscando…" : "Ver link da pesquisa"}
+      </button>
+      {erro && (
+        <span style={{ fontSize: 13, color: T.danger, textAlign: "right", maxWidth: 220 }}>
+          Não deu para buscar o link: {erro}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* ============================================================
    LINHA
    ============================================================ */
-function Linha({ sessao, aberta, onAbrir, onFechar, onPronto }) {
+function Linha({ sessao, aberta, onAbrir, onFechar, onPronto, onVerLink }) {
   const p = sessao.processos;
   const registrada = sessao.status !== "agendada";
+  const realizada = sessao.status === "realizada";
   const coaching = p.tipo === "coaching";
 
   return (
@@ -256,12 +313,16 @@ function Linha({ sessao, aberta, onAbrir, onFechar, onPronto }) {
 
         <div>
           {registrada ? (
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14,
-              padding: "9px 12px", background: T.successSoft, color: "#12603c"
-            }}>
-              <Send size={15} strokeWidth={2} /> Pesquisa enviada
-            </span>
+            realizada ? (
+              <LinkPesquisa sessao={sessao} onAbrir={onVerLink} />
+            ) : (
+              <span style={{
+                display: "inline-flex", alignItems: "center", fontSize: 14,
+                padding: "9px 12px", background: T.n200, color: T.n600
+              }}>
+                {sessao.status === "faltou" ? "Cliente não veio" : "Remarcada"}
+              </span>
+            )
           ) : (
             <button type="button" onClick={aberta ? onFechar : onAbrir}
               style={{
@@ -403,7 +464,8 @@ export default function Hoje() {
                 aberta={abertaId === s.id}
                 onAbrir={() => { setAbertaId(s.id); setEnvio(null); }}
                 onFechar={() => setAbertaId(null)}
-                onPronto={(r) => registrado(s, r)} />
+                onPronto={(r) => registrado(s, r)}
+                onVerLink={(r) => { setAbertaId(null); setEnvio(r); }} />
             ))}
           </ul>
         )}
