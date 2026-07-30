@@ -202,18 +202,26 @@ function LinkPesquisa({ sessao, onAbrir }) {
     setEstado("buscando");
     setErro(null);
 
-    // vw_links_pendentes já traz nome/telefone do destinatário e respeita o
-    // RLS: o treinador só enxerga os próprios envios não respondidos.
+    // vw_links_pendentes já resolve o destinatário (participante ou contato do
+    // cliente) e respeita o RLS: o treinador só enxerga os próprios envios não
+    // respondidos.
     const { data, error } = await supabase
       .from("vw_links_pendentes")
-      .select("token, nome, telefone")
+      .select("token, destinatario, telefone, treinador")
       .eq("sessao_id", sessao.id);
 
     if (error) { setEstado("pronto"); setErro(error.message); return; }
     if (!data || data.length === 0) { setEstado("vazio"); return; }
 
     setEstado("pronto");
-    onAbrir({ links: data, treinador: sessao.processos.treinadores?.nome });
+    onAbrir({
+      links: data.map((l) => ({
+        nome: l.destinatario,
+        telefone: l.telefone,
+        token: l.token,
+      })),
+      treinador: data[0].treinador,
+    });
   };
 
   if (estado === "vazio") {
@@ -364,8 +372,7 @@ export default function Hoje() {
       .select(`
         id, numero, agendado_inicio, agendado_fim, status,
         processos ( codigo, tipo, total_sessoes,
-          clientes ( nome, empresa, telefone ),
-          treinadores ( nome ) )
+          clientes ( nome, empresa, telefone ) )
       `)
       .gte("agendado_inicio", inicio.toISOString())
       .lte("agendado_inicio", fim.toISOString())
