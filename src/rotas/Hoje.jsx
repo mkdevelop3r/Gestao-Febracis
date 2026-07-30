@@ -5,6 +5,7 @@ import {
 import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
 import LinksPesquisa from "../componentes/LinksPesquisa.jsx";
+import ProximosEncontros from "../componentes/ProximosEncontros.jsx";
 
 const FERRAMENTAS = [
   "Roda da vida", "Metas SMART", "Mapa do comportamento",
@@ -488,6 +489,8 @@ export default function Hoje() {
             </p>
           </div>
         )}
+
+        <ProximosEncontros />
       </main>
     </div>
   );
