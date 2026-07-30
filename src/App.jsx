@@ -6,6 +6,7 @@ import Hoje from "./rotas/Hoje.jsx";
 import Gestao from "./rotas/Gestao.jsx";
 import Pesquisa from "./rotas/Pesquisa.jsx";
 import { T } from "./tokens.js";
+import Agendar from "./rotas/Agendar.jsx";
 
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda carregando
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/hoje" element={sessao ? <Hoje /> : <Navigate to="/entrar" replace />} />
         <Route path="/gestao" element={sessao ? <Gestao /> : <Navigate to="/entrar" replace />} />
         <Route path="*" element={<Navigate to={sessao ? "/hoje" : "/entrar"} replace />} />
+        <Route path="/agendar" element={sessao ? <Agendar /> : <Navigate to="/entrar" replace />} />
       </Routes>
     </BrowserRouter>
   );
