@@ -80,8 +80,12 @@ export default function Gestao() {
 
   useEffect(() => {
     (async () => {
+      // A gestão enxerga todos os perfis pelo RLS, então sem filtro a
+      // consulta volta várias linhas e o maybeSingle() quebra. Filtra pelo
+      // próprio usuário para trazer só o dele.
+      const { data: { user } } = await supabase.auth.getUser();
       const { data: perfil } = await supabase
-        .from("perfis").select("papel").maybeSingle();
+        .from("perfis").select("papel").eq("id", user.id).maybeSingle();
 
       setPapel(perfil?.papel ?? null);
       if (!["gestao", "admin"].includes(perfil?.papel)) return;
