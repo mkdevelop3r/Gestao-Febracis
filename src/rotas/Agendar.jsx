@@ -5,6 +5,7 @@ import {
 import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
 import Cabecalho from "../componentes/Cabecalho.jsx";
+import NovoProcesso from "../componentes/NovoProcesso.jsx";
 
 const dataHora = (iso) =>
   new Date(iso).toLocaleString("pt-BR",
@@ -150,6 +151,8 @@ export default function Agendar() {
         </p>
         <h1 style={{ fontSize: 32, marginBottom: 20 }}>Marcar encontros</h1>
 
+        <NovoProcesso onCriado={carregarProcessos} />
+
         {processos === null && <p style={{ color: T.n600 }}>Carregando…</p>}
 
         {processos?.length === 0 && (
@@ -159,7 +162,7 @@ export default function Agendar() {
               Nenhum processo ativo
             </p>
             <p style={{ fontSize: 14, color: T.n600, margin: 0 }}>
-              Cadastre o cliente e o processo no Supabase para começar a marcar encontros.
+              Crie o primeiro no botão “Novo processo” acima para começar a marcar encontros.
             </p>
           </div>
         )}
