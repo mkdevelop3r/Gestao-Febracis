@@ -6,6 +6,7 @@ import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import NovoProcesso from "../componentes/NovoProcesso.jsx";
+import PerguntasResultado from "../componentes/PerguntasResultado.jsx";
 
 const dataHora = (iso) =>
   new Date(iso).toLocaleString("pt-BR",
@@ -365,6 +366,8 @@ export default function Agendar() {
                       </ul>
                     )}
                   </section>
+
+                  <PerguntasResultado processo={ativo} />
                 </>
               )}
             </div>
