@@ -55,6 +55,8 @@ function Formulario({ sessao, onCancelar, onPronto }) {
   const [plano, setPlano] = useState("");
   const [proximos, setProximos] = useState("");
   const [ferramentas, setFerramentas] = useState([]);
+  const [novaData, setNovaData] = useState("");
+  const [novaHora, setNovaHora] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -66,6 +68,11 @@ function Formulario({ sessao, onCancelar, onPronto }) {
     setSalvando(true);
     setErro(null);
 
+    // Só faz sentido para quem não compareceu; vazio vira null.
+    const novaDataISO = !compareceu && novaData
+      ? new Date(`${novaData}T${novaHora || "09:00"}:00`).toISOString()
+      : null;
+
     const { data, error } = await supabase.rpc("registrar_sessao", {
       p_sessao_id: sessao.id,
       p_status: ocorrencia,
@@ -74,11 +81,12 @@ function Formulario({ sessao, onCancelar, onPronto }) {
       p_proximos: proximos || null,
       p_ferramentas: ferramentas.length ? ferramentas : null,
       p_compromissos: null,
+      p_nova_data: novaDataISO,
     });
 
     setSalvando(false);
     if (error) { setErro(error.message); return; }
-    onPronto(data);
+    onPronto(data, novaDataISO);
   };
 
   const primeiro = sessao.processos.clientes.nome.split(" ")[0];
@@ -115,6 +123,19 @@ function Formulario({ sessao, onCancelar, onPronto }) {
             : "O que houve."}
           style={{ ...entrada, resize: "vertical" }} />
       </label>
+
+      {!compareceu && (
+        <div>
+          <Rotulo>Nova data, se já souber</Rotulo>
+          <div style={{ display: "grid", gap: 12,
+                        gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
+            <input type="date" value={novaData} aria-label="Nova data"
+              onChange={(e) => setNovaData(e.target.value)} style={entrada} />
+            <input type="time" value={novaHora} aria-label="Nova hora"
+              onChange={(e) => setNovaHora(e.target.value)} style={entrada} />
+          </div>
+        </div>
+      )}
 
       {compareceu && (
         <>
@@ -354,6 +375,32 @@ function Linha({ sessao, aberta, onAbrir, onFechar, onPronto, onVerLink }) {
   );
 }
 
+/* Mensagem pós-registro para quem não compareceu. A data vem do que o
+   treinador digitou; o treinador do conflito é o dono da sessão. */
+function avisoRemarcacao(r, sessao, novaData) {
+  if (r?.remarcada) {
+    let quando = "a nova data";
+    if (novaData) {
+      const d = new Date(novaData);
+      quando = `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às `
+        + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }
+    return { texto: `Registrado. Novo encontro marcado para ${quando}.`, tom: "bom" };
+  }
+  if (r?.conflito) {
+    const treinador = sessao.processos.treinadores?.nome ?? "o treinador";
+    return {
+      texto: `Registrado, mas ${treinador} já tem atendimento nesse horário. `
+        + "Marque o novo encontro na tela de agenda.",
+      tom: "alerta",
+    };
+  }
+  if (r?.pendente_remarcar) {
+    return { texto: "Registrado. Este encontro ficou pendente de remarcação.", tom: "neutro" };
+  }
+  return null;
+}
+
 /* ============================================================
    TELA
    ============================================================ */
@@ -362,6 +409,7 @@ export default function Hoje() {
   const [erro, setErro] = useState(null);
   const [abertaId, setAbertaId] = useState(null);
   const [envio, setEnvio] = useState(null);
+  const [aviso, setAviso] = useState(null);
 
   const carregar = async () => {
     const agora = new Date();
@@ -374,7 +422,8 @@ export default function Hoje() {
       .select(`
         id, numero, agendado_inicio, agendado_fim, status,
         processos ( codigo, tipo, total_sessoes,
-          clientes ( nome, empresa, telefone ) )
+          clientes ( nome, empresa, telefone ),
+          treinadores ( nome ) )
       `)
       .gte("agendado_inicio", inicio.toISOString())
       .lte("agendado_inicio", fim.toISOString())
@@ -386,9 +435,15 @@ export default function Hoje() {
 
   useEffect(() => { carregar(); }, []);
 
-  const registrado = (sessao, resultado) => {
+  const registrado = (sessao, resultado, novaData) => {
     setAbertaId(null);
-    setEnvio(resultado?.pesquisa ? resultado : null);
+    if (resultado?.pesquisa) {
+      setEnvio(resultado);
+      setAviso(null);
+    } else {
+      setEnvio(null);
+      setAviso(avisoRemarcacao(resultado, sessao, novaData));
+    }
     carregar();
   };
 
@@ -437,6 +492,27 @@ export default function Hoje() {
           />
         )}
 
+        {aviso && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            marginBottom: 20, padding: "12px 16px",
+            background: aviso.tom === "alerta" ? T.dangerSoft
+              : aviso.tom === "bom" ? T.successSoft : T.bg,
+            border: `2px solid ${aviso.tom === "alerta" ? T.danger
+              : aviso.tom === "bom" ? T.success : T.n300}`,
+            borderLeft: `4px solid ${aviso.tom === "alerta" ? T.danger
+              : aviso.tom === "bom" ? T.success : T.gold}`,
+            color: aviso.tom === "alerta" ? "#8f2119"
+              : aviso.tom === "bom" ? "#12603c" : T.text
+          }}>
+            <p style={{ margin: 0, fontSize: 14 }}>{aviso.texto}</p>
+            <button type="button" onClick={() => setAviso(null)} aria-label="Fechar"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+        )}
+
         {erro && (
           <p style={{
             background: T.dangerSoft, borderLeft: `4px solid ${T.danger}`,
@@ -456,10 +532,10 @@ export default function Hoje() {
             {sessoes.map((s) => (
               <Linha key={s.id} sessao={s}
                 aberta={abertaId === s.id}
-                onAbrir={() => { setAbertaId(s.id); setEnvio(null); }}
+                onAbrir={() => { setAbertaId(s.id); setEnvio(null); setAviso(null); }}
                 onFechar={() => setAbertaId(null)}
-                onPronto={(r) => registrado(s, r)}
-                onVerLink={(r) => { setAbertaId(null); setEnvio(r); }} />
+                onPronto={(r, nd) => registrado(s, r, nd)}
+                onVerLink={(r) => { setAbertaId(null); setEnvio(r); setAviso(null); }} />
             ))}
           </ul>
         )}

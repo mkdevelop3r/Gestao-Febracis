@@ -215,6 +215,16 @@ export default function Agendar() {
                             ? `próximo em ${dataHora(p.proxima_em)}`
                             : "sem encontro marcado"}
                         </span>
+                        {p.precisa_remarcar > 0 && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                                         marginTop: 8, fontSize: 12, fontWeight: 600,
+                                         color: "#8f2119" }}>
+                            <AlertTriangle size={13} strokeWidth={2} />
+                            {p.precisa_remarcar === 1
+                              ? "1 encontro para remarcar"
+                              : `${p.precisa_remarcar} encontros para remarcar`}
+                          </span>
+                        )}
                       </button>
                     </li>
                   );

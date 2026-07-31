@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Clock3, Star } from "lucide-react";
+import { AlertTriangle, Clock3, Star, CalendarClock } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T } from "../tokens.js";
 import Cabecalho from "../componentes/Cabecalho.jsx";
@@ -10,6 +10,14 @@ import Cabecalho from "../componentes/Cabecalho.jsx";
 
 const dia = (iso) =>
   new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+/* Quem lê "Encontros para remarcar" vai ligar para o cliente — precisa do
+   horário original, não só do dia. */
+const dataHora = (iso) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às `
+    + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+};
 
 function Numero({ rotulo, valor, sufixo, tom }) {
   const cor = tom === "alerta" ? T.danger : tom === "bom" ? T.success : T.text;
@@ -77,6 +85,7 @@ export default function Gestao() {
   const [pendencias, setPendencias] = useState([]);
   const [pesquisas, setPesquisas] = useState([]);
   const [satisfacao, setSatisfacao] = useState([]);
+  const [remarcar, setRemarcar] = useState([]);
   const [erro, setErro] = useState(null);
 
   useEffect(() => {
@@ -91,20 +100,22 @@ export default function Gestao() {
       setPapel(perfil?.papel ?? null);
       if (!["gestao", "admin"].includes(perfil?.papel)) return;
 
-      const [r, p, q, s] = await Promise.all([
+      const [r, p, q, s, rm] = await Promise.all([
         supabase.from("vw_piloto_resumo").select("*").maybeSingle(),
         supabase.from("vw_piloto_pendencias").select("*").order("agendado_fim"),
         supabase.from("vw_piloto_pesquisas").select("*").order("criado_em"),
         supabase.from("vw_piloto_satisfacao").select("*").order("media"),
+        supabase.from("vw_precisa_remarcar").select("*").order("dias_parado", { ascending: false }),
       ]);
 
-      const falha = [r, p, q, s].find((x) => x.error);
+      const falha = [r, p, q, s, rm].find((x) => x.error);
       if (falha) { setErro(falha.error.message); return; }
 
       setResumo(r.data);
       setPendencias(p.data ?? []);
       setPesquisas(q.data ?? []);
       setSatisfacao(s.data ?? []);
+      setRemarcar(rm.data ?? []);
     })();
   }, []);
 
@@ -216,6 +227,35 @@ export default function Gestao() {
                     {s.pior_nota}
                   </td>
                   <td style={{ ...td, color: T.n600 }}>{s.respostas}</td>
+                </tr>
+              ))} />
+          )}
+        </Bloco>
+
+        <Bloco Icone={CalendarClock} titulo="Encontros para remarcar"
+          descricao="Sessão que não aconteceu e ainda não tem novo horário marcado."
+          vazio="Nada pendente de remarcação.">
+          {remarcar.length > 0 && (
+            <Tabela colunas={["Cliente", "Treinador", "Quando era", "Situação", "Motivo", "Parado há"]}
+              linhas={remarcar.map((s) => (
+                <tr key={s.sessao_id}>
+                  <td style={{ ...td, fontWeight: 700 }}>{s.cliente}</td>
+                  <td style={td}>{s.treinador}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{dataHora(s.era_para_ser_em)}</td>
+                  <td style={td}>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600, textTransform: "uppercase", padding: "2px 8px",
+                      background: s.status === "faltou" ? T.dangerSoft : T.goldSoft,
+                      color: s.status === "faltou" ? "#8f2119" : "#8f6626"
+                    }}>
+                      {s.status === "faltou" ? "Cliente não veio" : "Remarcada"}
+                    </span>
+                  </td>
+                  <td style={{ ...td, color: T.n600 }}>{s.motivo || "—"}</td>
+                  <td style={{ ...td, color: s.dias_parado >= 2 ? T.danger : T.n700,
+                               fontWeight: s.dias_parado >= 2 ? 700 : 400 }}>
+                    {s.dias_parado === 0 ? "hoje" : `${s.dias_parado} dia${s.dias_parado > 1 ? "s" : ""}`}
+                  </td>
                 </tr>
               ))} />
           )}
