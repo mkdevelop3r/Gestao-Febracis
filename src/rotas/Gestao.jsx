@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Clock3, Star, CalendarClock, Gauge, MessageSquare } from "lucide-react";
+import { AlertTriangle, Clock3, Star, CalendarClock, Gauge, MessageSquare, UserCheck, X } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T } from "../tokens.js";
 import Cabecalho from "../componentes/Cabecalho.jsx";
+import LinksPesquisa from "../componentes/LinksPesquisa.jsx";
+import FormularioRegistro, { avisoRemarcacao } from "../componentes/FormularioRegistro.jsx";
 
 /* Termômetro do piloto — não é o painel da diretoria.
    Responde duas perguntas: o treinador registra? o cliente responde? */
@@ -88,7 +90,36 @@ export default function Gestao() {
   const [remarcar, setRemarcar] = useState([]);
   const [nps, setNps] = useState([]);
   const [abertas, setAbertas] = useState([]);
+  const [porQuem, setPorQuem] = useState([]);
+  const [registrando, setRegistrando] = useState(null);
+  const [envio, setEnvio] = useState(null);
+  const [aviso, setAviso] = useState(null);
   const [erro, setErro] = useState(null);
+
+  const carregar = async () => {
+    const [r, p, q, s, rm, np, ab, rq] = await Promise.all([
+      supabase.from("vw_piloto_resumo").select("*").maybeSingle(),
+      supabase.from("vw_piloto_pendencias").select("*").order("agendado_fim"),
+      supabase.from("vw_piloto_pesquisas").select("*").order("criado_em"),
+      supabase.from("vw_piloto_satisfacao").select("*").order("media"),
+      supabase.from("vw_precisa_remarcar").select("*").order("dias_parado", { ascending: false }),
+      supabase.from("vw_nps").select("*").order("respostas", { ascending: false }),
+      supabase.from("vw_respostas_abertas").select("*").order("respondido_em", { ascending: false }),
+      supabase.from("vw_registro_por_quem").select("*").order("percentual_coordenacao", { ascending: false }),
+    ]);
+
+    const falha = [r, p, q, s, rm, np, ab, rq].find((x) => x.error);
+    if (falha) { setErro(falha.error.message); return; }
+
+    setResumo(r.data);
+    setPendencias(p.data ?? []);
+    setPesquisas(q.data ?? []);
+    setSatisfacao(s.data ?? []);
+    setRemarcar(rm.data ?? []);
+    setNps(np.data ?? []);
+    setAbertas(ab.data ?? []);
+    setPorQuem(rq.data ?? []);
+  };
 
   useEffect(() => {
     (async () => {
@@ -100,30 +131,24 @@ export default function Gestao() {
         .from("perfis").select("papel").eq("id", user.id).maybeSingle();
 
       setPapel(perfil?.papel ?? null);
-      if (!["gestao", "admin"].includes(perfil?.papel)) return;
-
-      const [r, p, q, s, rm, np, ab] = await Promise.all([
-        supabase.from("vw_piloto_resumo").select("*").maybeSingle(),
-        supabase.from("vw_piloto_pendencias").select("*").order("agendado_fim"),
-        supabase.from("vw_piloto_pesquisas").select("*").order("criado_em"),
-        supabase.from("vw_piloto_satisfacao").select("*").order("media"),
-        supabase.from("vw_precisa_remarcar").select("*").order("dias_parado", { ascending: false }),
-        supabase.from("vw_nps").select("*").order("respostas", { ascending: false }),
-        supabase.from("vw_respostas_abertas").select("*").order("respondido_em", { ascending: false }),
-      ]);
-
-      const falha = [r, p, q, s, rm, np, ab].find((x) => x.error);
-      if (falha) { setErro(falha.error.message); return; }
-
-      setResumo(r.data);
-      setPendencias(p.data ?? []);
-      setPesquisas(q.data ?? []);
-      setSatisfacao(s.data ?? []);
-      setRemarcar(rm.data ?? []);
-      setNps(np.data ?? []);
-      setAbertas(ab.data ?? []);
+      if (["gestao", "admin"].includes(perfil?.papel)) carregar();
     })();
   }, []);
+
+  // Registro feito pela coordenação por um treinador que esqueceu — mesmo
+  // resultado do Hoje: pesquisa abre o painel de links, remarcação vira aviso.
+  const registrado = (resultado, novaData) => {
+    const treinador = registrando?.treinador;
+    setRegistrando(null);
+    if (resultado?.pesquisa) {
+      setEnvio(resultado);
+      setAviso(null);
+    } else {
+      setEnvio(null);
+      setAviso(avisoRemarcacao(resultado, { processos: { treinadores: { nome: treinador } } }, novaData));
+    }
+    carregar();
+  };
 
   if (papel === undefined) {
     return <p style={{ padding: 24, color: T.n600 }}>Carregando…</p>;
@@ -166,6 +191,57 @@ export default function Gestao() {
           </p>
         )}
 
+        {envio && (
+          <LinksPesquisa links={envio.links} treinador={envio.treinador}
+            onFechar={() => setEnvio(null)} />
+        )}
+
+        {aviso && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            marginBottom: 20, padding: "12px 16px",
+            background: aviso.tom === "alerta" ? T.dangerSoft
+              : aviso.tom === "bom" ? T.successSoft : T.bg,
+            border: `2px solid ${aviso.tom === "alerta" ? T.danger
+              : aviso.tom === "bom" ? T.success : T.n300}`,
+            borderLeft: `4px solid ${aviso.tom === "alerta" ? T.danger
+              : aviso.tom === "bom" ? T.success : T.gold}`,
+            color: aviso.tom === "alerta" ? "#8f2119"
+              : aviso.tom === "bom" ? "#12603c" : T.text
+          }}>
+            <p style={{ margin: 0, fontSize: 14 }}>{aviso.texto}</p>
+            <button type="button" onClick={() => setAviso(null)} aria-label="Fechar"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+        )}
+
+        {registrando && (
+          <section style={{ background: T.bg, border: `2px solid ${T.accent}`, marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                          background: T.accentDeep, color: "#fff", padding: "12px 16px" }}>
+              <span style={{ fontWeight: 800 }}>
+                Registrar por {registrando.treinador} — {registrando.cliente}
+              </span>
+              <button type="button" onClick={() => setRegistrando(null)} aria-label="Fechar"
+                style={{ background: "none", border: "none", color: "#fff", cursor: "pointer" }}>
+                <X size={18} strokeWidth={2} />
+              </button>
+            </div>
+            <FormularioRegistro pelaGestao
+              sessao={{
+                id: registrando.sessao_id,
+                processos: {
+                  clientes: { nome: registrando.cliente },
+                  treinadores: { nome: registrando.treinador },
+                },
+              }}
+              onCancelar={() => setRegistrando(null)}
+              onPronto={registrado} />
+          </section>
+        )}
+
         {resumo && (
           <div style={{ display: "grid", gap: 12, marginBottom: 24,
                         gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
@@ -184,7 +260,7 @@ export default function Gestao() {
           descricao="Se esta lista cresce, o problema está na tela do treinador ou no hábito."
           vazio="Nenhuma sessão pendente. É o que se quer ver aqui.">
           {pendencias.length > 0 && (
-            <Tabela colunas={["Quando", "Cliente", "Treinador", "Parada há"]}
+            <Tabela colunas={["Quando", "Cliente", "Treinador", "Parada há", ""]}
               linhas={pendencias.map((s) => (
                 <tr key={s.sessao_id}>
                   <td style={td}>{dia(s.agendado_inicio)}</td>
@@ -193,6 +269,14 @@ export default function Gestao() {
                   <td style={{ ...td, color: s.dias_parada >= 2 ? T.danger : T.n700,
                                fontWeight: s.dias_parada >= 2 ? 700 : 400 }}>
                     {s.dias_parada === 0 ? "hoje" : `${s.dias_parada} dia${s.dias_parada > 1 ? "s" : ""}`}
+                  </td>
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button type="button"
+                      onClick={() => { setRegistrando(s); setEnvio(null); setAviso(null); }}
+                      style={{ padding: "7px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                               background: T.accent, color: "#fff", border: "none" }}>
+                      Registrar por ele
+                    </button>
                   </td>
                 </tr>
               ))} />
@@ -301,6 +385,26 @@ export default function Gestao() {
                   <td style={{ ...td, color: T.n600 }}>{a.pergunta}</td>
                   <td style={{ ...td, minWidth: 240 }}>{a.texto}</td>
                   <td style={{ ...td, color: T.n600, whiteSpace: "nowrap" }}>{dia(a.respondido_em)}</td>
+                </tr>
+              ))} />
+          )}
+        </Bloco>
+
+        <Bloco Icone={UserCheck} titulo="Quem está registrando"
+          descricao="Percentual alto quer dizer que o treinador não está registrando — não que a coordenação esteja ajudando demais."
+          vazio="Nenhuma sessão registrada ainda.">
+          {porQuem.length > 0 && (
+            <Tabela colunas={["Treinador", "Registradas", "Pela coordenação", "% coordenação"]}
+              linhas={porQuem.map((r) => (
+                <tr key={r.treinador_id}>
+                  <td style={{ ...td, fontWeight: 700 }}>{r.treinador}</td>
+                  <td style={td}>{r.registradas}</td>
+                  <td style={td}>{r.pela_coordenacao}</td>
+                  <td style={{ ...td, fontWeight: 800,
+                               color: r.percentual_coordenacao >= 50 ? T.danger
+                                 : r.percentual_coordenacao > 0 ? T.text : T.n600 }}>
+                    {r.percentual_coordenacao}%
+                  </td>
                 </tr>
               ))} />
           )}
