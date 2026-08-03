@@ -1,19 +1,32 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Check, AlertTriangle, Send, Sparkles } from "lucide-react";
+import { Plus, Trash2, Check, AlertTriangle, Send, Lock } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T, entrada } from "../tokens.js";
+import GerarPerguntasIA from "./GerarPerguntasIA.jsx";
 
-/* Pesquisa de resultado de uma mentoria: núcleo fixo mais até
-   três perguntas ligadas ao objetivo daquela mentoria.
-   O núcleo não é editável — é ele que permite comparar mentorias
-   entre si. As sob medida aparecem só no acompanhamento do
-   próprio processo. */
+/* Pesquisa de resultado de uma mentoria. Estrutura fixa:
+   1. NPS, texto travado, para o número ser comparável entre mentorias.
+   2..5. Até 4 perguntas livres da Elis, cada uma com categoria — o texto
+      muda, a categoria é o que permite comparar.
+   última. Uma pergunta aberta, sempre no fim. */
 
-const MAX = 3;
+const MAX = 4;
+
+/* recomendacao (NPS) e aberta são posicionadas pelo banco — não entram aqui. */
+const CATEGORIAS = [
+  ["aplicacao", "Aplicação"],
+  ["resultado", "Resultado no negócio"],
+  ["evolucao", "Evolução do gestor"],
+  ["continuidade", "Continuidade"],
+  ["dificuldade", "Dificuldade"],
+];
+const CATS_VALIDAS = CATEGORIAS.map(([v]) => v);
+const ABERTA_PADRAO = "O que faria esta mentoria valer mais para você?";
 
 export default function PerguntasResultado({ processo }) {
-  const [nucleo, setNucleo] = useState([]);
+  const [npsTexto, setNpsTexto] = useState("");
   const [custom, setCustom] = useState([]);
+  const [aberta, setAberta] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -34,27 +47,32 @@ export default function PerguntasResultado({ processo }) {
     if (error) { setErro(error.message); setCarregando(false); return; }
 
     if (data?.length) {
-      setNucleo(data.filter((p) => p.nucleo));
-      setCustom(data.filter((p) => !p.nucleo).map((p) => ({ enunciado: p.enunciado })));
+      // Distingue pela categoria, não pela posição.
+      const nps = data.find((p) => p.categoria === "recomendacao");
+      const fim = data.find((p) => p.categoria === "aberta");
+      const livres = data.filter(
+        (p) => p.categoria !== "recomendacao" && p.categoria !== "aberta");
+
+      setNpsTexto(nps?.enunciado ?? "");
+      setCustom(livres.map((p) => ({
+        enunciado: p.enunciado,
+        categoria: CATS_VALIDAS.includes(p.categoria) ? p.categoria : "resultado",
+      })));
+      setAberta(fim?.enunciado ?? "");
     } else {
-      // Ainda sem modelo próprio: mostra o núcleo global
-      const { data: global } = await supabase
-        .from("pesquisa_perguntas")
-        .select("ordem, enunciado, formato, pesquisa_modelos!inner(tipo, ativo, processo_id)")
-        .eq("pesquisa_modelos.tipo", "resultado")
-        .eq("pesquisa_modelos.ativo", true)
-        .is("pesquisa_modelos.processo_id", null)
-        .order("ordem");
-      setNucleo(global ?? []);
+      // Sem modelo próprio: o texto do NPS vem do banco.
+      const { data: texto } = await supabase.rpc("nps_enunciado");
+      setNpsTexto(texto ?? "");
       setCustom([]);
+      setAberta("");
     }
     setCarregando(false);
   };
 
   useEffect(() => { carregar(); }, [processo.id]);
 
-  const trocar = (i, valor) =>
-    setCustom((a) => a.map((p, j) => (j === i ? { enunciado: valor } : p)));
+  const trocar = (i, campo, valor) =>
+    setCustom((a) => a.map((p, j) => (j === i ? { ...p, [campo]: valor } : p)));
 
   const salvar = async () => {
     setSalvando(true);
@@ -63,7 +81,10 @@ export default function PerguntasResultado({ processo }) {
 
     const { error } = await supabase.rpc("salvar_perguntas_resultado", {
       p_processo_id: processo.id,
-      p_perguntas: custom.filter((p) => p.enunciado.trim()),
+      p_perguntas: custom
+        .filter((p) => p.enunciado.trim())
+        .map((p) => ({ enunciado: p.enunciado.trim(), categoria: p.categoria })),
+      p_aberta: aberta.trim() || null,
     });
 
     setSalvando(false);
@@ -89,6 +110,11 @@ export default function PerguntasResultado({ processo }) {
 
   if (processo.tipo !== "mentoria") return null;
 
+  const rotulo = {
+    display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase",
+    letterSpacing: "0.06em", color: T.n700, marginBottom: 8,
+  };
+
   return (
     <section style={{ background: T.bg, border: `2px solid ${T.n300}`, marginTop: 20 }}>
       <div style={{ padding: "14px 16px", borderBottom: `2px solid ${T.n200}` }}>
@@ -104,59 +130,64 @@ export default function PerguntasResultado({ processo }) {
         </p>
       ) : (
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 20 }}>
-          {/* Núcleo */}
+          {/* NPS — travado */}
           <div>
-            <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase",
-                        letterSpacing: "0.06em", color: T.n700, marginBottom: 8 }}>
-              Perguntas padrão
-            </p>
-            <ul style={{ listStyle: "none", margin: 0, padding: 0,
-                         display: "flex", flexDirection: "column", gap: 6 }}>
-              {nucleo.map((p, i) => (
-                <li key={i} style={{ display: "flex", gap: 10, fontSize: 14,
-                                     color: T.n700, padding: "8px 12px",
-                                     background: T.n100, borderLeft: `4px solid ${T.n300}` }}>
-                  <span style={{ fontWeight: 700, color: T.n500 }}>
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  {p.enunciado}
-                </li>
-              ))}
-            </ul>
+            <span style={rotulo}>Pergunta fixa · NPS</span>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14,
+                          color: T.n700, padding: "10px 12px",
+                          background: T.n100, borderLeft: `4px solid ${T.gold}` }}>
+              <span style={{ fontWeight: 700, color: T.n500 }}>01</span>
+              <span style={{ flex: 1 }}>{npsTexto}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                             fontSize: 12, color: T.n500, whiteSpace: "nowrap" }}>
+                <Lock size={13} strokeWidth={2} /> não editável
+              </span>
+            </div>
             <p style={{ fontSize: 13, color: T.n600, margin: "8px 0 0" }}>
-              Iguais em todas as mentorias. É o que permite comparar uma com a outra.
+              Igual em toda mentoria. É o que torna o número comparável com o mercado.
             </p>
           </div>
 
-          {/* Sob medida */}
+          {/* Livres, com categoria */}
           <div>
-            <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase",
-                        letterSpacing: "0.06em", color: T.n700, marginBottom: 8 }}>
-              Perguntas desta mentoria
+            <span style={rotulo}>Perguntas desta mentoria</span>
+            <p style={{ fontSize: 13, color: T.n600, margin: "0 0 10px" }}>
+              A categoria é o que permite comparar: o texto muda entre mentorias, a
+              categoria não.
             </p>
 
             {custom.length === 0 && (
               <p style={{ fontSize: 14, color: T.n600, margin: "0 0 10px" }}>
                 Nenhuma ainda. Acrescente perguntas ligadas ao objetivo desta mentoria —
-                elas entram depois das padrão.
+                elas entram entre o NPS e a pergunta aberta.
               </p>
             )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {custom.map((p, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start",
+                                      flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700, color: T.gold, paddingTop: 12,
                                  minWidth: 22, fontSize: 13 }}>
-                    {String(nucleo.length + i + 1).padStart(2, "0")}
+                    {String(i + 2).padStart(2, "0")}
                   </span>
                   <textarea
                     rows={2}
                     value={p.enunciado}
-                    onChange={(e) => trocar(i, e.target.value)}
+                    onChange={(e) => trocar(i, "enunciado", e.target.value)}
                     placeholder="Quanto o controle de custo por produto melhorou desde o início?"
-                    style={{ ...entrada, resize: "vertical" }}
+                    style={{ ...entrada, flex: "1 1 220px", resize: "vertical" }}
                   />
-                  <button type="button" onClick={() => setCustom((a) => a.filter((_, j) => j !== i))}
+                  <select value={p.categoria}
+                    onChange={(e) => trocar(i, "categoria", e.target.value)}
+                    aria-label="Categoria da pergunta"
+                    style={{ ...entrada, flex: "0 0 auto", width: 190 }}>
+                    {CATEGORIAS.map(([v, r]) => (
+                      <option key={v} value={v}>{r}</option>
+                    ))}
+                  </select>
+                  <button type="button"
+                    onClick={() => setCustom((a) => a.filter((_, j) => j !== i))}
                     aria-label="Remover pergunta"
                     style={{ background: "none", border: "none", cursor: "pointer",
                              color: T.n500, padding: "12px 4px" }}>
@@ -168,7 +199,7 @@ export default function PerguntasResultado({ processo }) {
 
             {custom.length < MAX && (
               <button type="button"
-                onClick={() => setCustom((a) => [...a, { enunciado: "" }])}
+                onClick={() => setCustom((a) => [...a, { enunciado: "", categoria: "resultado" }])}
                 style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 8,
                          padding: "9px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer",
                          background: T.bg, color: T.n700, border: `2px solid ${T.n300}` }}>
@@ -177,13 +208,29 @@ export default function PerguntasResultado({ processo }) {
             )}
 
             <p style={{ fontSize: 13, color: T.n600, margin: "10px 0 0" }}>
-              Máximo de {MAX}. Todas usam escala de 0 a 10 — misturar escalas quebra a comparação.
+              Até {MAX} perguntas. Todas usam escala de 0 a 10 — misturar escalas quebra a comparação.
             </p>
 
-            <p style={{ fontSize: 13, color: T.n500, margin: "10px 0 0",
-                        display: "flex", alignItems: "center", gap: 6 }}>
-              <Sparkles size={14} strokeWidth={2} />
-              Em breve: gerar um rascunho a partir do PDF de objetivo e das entregas.
+            <GerarPerguntasIA processo={processo}
+              onGerado={(perguntas) =>
+                setCustom(perguntas.slice(0, MAX).map((p) => ({
+                  enunciado: p.enunciado,
+                  categoria: CATS_VALIDAS.includes(p.categoria) ? p.categoria : "resultado",
+                })))} />
+          </div>
+
+          {/* Aberta — sempre por último */}
+          <div>
+            <span style={rotulo}>Pergunta aberta · sempre por último</span>
+            <textarea
+              rows={2}
+              value={aberta}
+              onChange={(e) => setAberta(e.target.value)}
+              placeholder={ABERTA_PADRAO}
+              style={{ ...entrada, resize: "vertical" }}
+            />
+            <p style={{ fontSize: 13, color: T.n600, margin: "8px 0 0" }}>
+              Resposta em texto, no fim da pesquisa. Em branco, usa a padrão: “{ABERTA_PADRAO}”
             </p>
           </div>
 

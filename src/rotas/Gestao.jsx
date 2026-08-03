@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Clock3, Star, CalendarClock } from "lucide-react";
+import { AlertTriangle, Clock3, Star, CalendarClock, Gauge, MessageSquare } from "lucide-react";
 import { supabase } from "../supabase.js";
 import { T } from "../tokens.js";
 import Cabecalho from "../componentes/Cabecalho.jsx";
@@ -86,6 +86,8 @@ export default function Gestao() {
   const [pesquisas, setPesquisas] = useState([]);
   const [satisfacao, setSatisfacao] = useState([]);
   const [remarcar, setRemarcar] = useState([]);
+  const [nps, setNps] = useState([]);
+  const [abertas, setAbertas] = useState([]);
   const [erro, setErro] = useState(null);
 
   useEffect(() => {
@@ -100,15 +102,17 @@ export default function Gestao() {
       setPapel(perfil?.papel ?? null);
       if (!["gestao", "admin"].includes(perfil?.papel)) return;
 
-      const [r, p, q, s, rm] = await Promise.all([
+      const [r, p, q, s, rm, np, ab] = await Promise.all([
         supabase.from("vw_piloto_resumo").select("*").maybeSingle(),
         supabase.from("vw_piloto_pendencias").select("*").order("agendado_fim"),
         supabase.from("vw_piloto_pesquisas").select("*").order("criado_em"),
         supabase.from("vw_piloto_satisfacao").select("*").order("media"),
         supabase.from("vw_precisa_remarcar").select("*").order("dias_parado", { ascending: false }),
+        supabase.from("vw_nps").select("*").order("respostas", { ascending: false }),
+        supabase.from("vw_respostas_abertas").select("*").order("respondido_em", { ascending: false }),
       ]);
 
-      const falha = [r, p, q, s, rm].find((x) => x.error);
+      const falha = [r, p, q, s, rm, np, ab].find((x) => x.error);
       if (falha) { setErro(falha.error.message); return; }
 
       setResumo(r.data);
@@ -116,6 +120,8 @@ export default function Gestao() {
       setPesquisas(q.data ?? []);
       setSatisfacao(s.data ?? []);
       setRemarcar(rm.data ?? []);
+      setNps(np.data ?? []);
+      setAbertas(ab.data ?? []);
     })();
   }, []);
 
@@ -256,6 +262,45 @@ export default function Gestao() {
                                fontWeight: s.dias_parado >= 2 ? 700 : 400 }}>
                     {s.dias_parado === 0 ? "hoje" : `${s.dias_parado} dia${s.dias_parado > 1 ? "s" : ""}`}
                   </td>
+                </tr>
+              ))} />
+          )}
+        </Bloco>
+
+        <Bloco Icone={Gauge} titulo="NPS por mentoria"
+          descricao="Promotores menos detratores, de -100 a +100. Não é nota nem porcentagem — e com poucas respostas oscila muito, então leia junto com a contagem."
+          vazio="Nenhuma resposta de NPS ainda.">
+          {nps.length > 0 && (
+            <Tabela colunas={["Cliente", "Treinador", "NPS", "Promotores", "Detratores", "Respostas"]}
+              linhas={nps.map((n) => (
+                <tr key={n.processo_id}>
+                  <td style={{ ...td, fontWeight: 700 }}>{n.cliente}</td>
+                  <td style={td}>{n.treinador}</td>
+                  <td style={{ ...td, fontWeight: 800, fontSize: 16,
+                               color: n.nps >= 50 ? T.success : n.nps >= 0 ? T.text : T.danger }}>
+                    {n.nps > 0 ? `+${n.nps}` : n.nps}
+                  </td>
+                  <td style={{ ...td, color: T.n600 }}>{n.promotores}</td>
+                  <td style={{ ...td, color: T.n600 }}>{n.detratores}</td>
+                  <td style={{ ...td, fontWeight: 700 }}>{n.respostas}</td>
+                </tr>
+              ))} />
+          )}
+        </Bloco>
+
+        <Bloco Icone={MessageSquare} titulo="Respostas abertas"
+          descricao="O que os clientes escreveram por extenso na pesquisa de resultado. Só a coordenação enxerga."
+          vazio="Nenhuma resposta aberta ainda.">
+          {abertas.length > 0 && (
+            <Tabela colunas={["Quem respondeu", "Cliente", "Treinador", "Pergunta", "Resposta", "Quando"]}
+              linhas={abertas.map((a, i) => (
+                <tr key={i}>
+                  <td style={{ ...td, fontWeight: 700 }}>{a.quem_respondeu}</td>
+                  <td style={td}>{a.cliente}</td>
+                  <td style={td}>{a.treinador}</td>
+                  <td style={{ ...td, color: T.n600 }}>{a.pergunta}</td>
+                  <td style={{ ...td, minWidth: 240 }}>{a.texto}</td>
+                  <td style={{ ...td, color: T.n600, whiteSpace: "nowrap" }}>{dia(a.respondido_em)}</td>
                 </tr>
               ))} />
           )}
